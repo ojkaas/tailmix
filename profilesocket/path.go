@@ -15,7 +15,7 @@ func DefaultDir() string {
 	if dir := strings.TrimSpace(os.Getenv(EnvDir)); dir != "" {
 		return dir
 	}
-	return "/var/run/tailmix"
+	return defaultDir
 }
 
 func Path(dir, profileID string) (string, error) {

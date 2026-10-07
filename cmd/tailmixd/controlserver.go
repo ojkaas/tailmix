@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"sync"
 
 	"github.com/maisem/tailmix/controlapi"
@@ -37,7 +38,9 @@ func startControlServer(ctx context.Context, socketDir string, backend controlap
 	if safesocket.PlatformUsesPeerCreds() {
 		mode = 0666
 	}
-	if err := os.Chmod(path, mode); err != nil {
+	if runtime.GOOS == "windows" {
+		// Named pipe; access is governed by safesocket's security descriptor.
+	} else if err := os.Chmod(path, mode); err != nil {
 		_ = listener.Close()
 		return nil, fmt.Errorf("secure daemon control socket %s: %w", path, err)
 	}
