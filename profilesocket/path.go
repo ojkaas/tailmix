@@ -26,7 +26,7 @@ func Path(dir, profileID string) (string, error) {
 		return "", errors.New("profile ID is required")
 	}
 	sum := sha256.Sum256([]byte(profileID))
-	return filepath.Join(dir, fmt.Sprintf("%s-%x.sock", socketLabel(profileID), sum[:6])), nil
+	return filepath.Join(socketDir(dir), fmt.Sprintf("%s-%x.sock", socketLabel(profileID), sum[:6])), nil
 }
 
 func socketLabel(profileID string) string {
