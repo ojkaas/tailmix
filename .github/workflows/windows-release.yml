@@ -1,0 +1,74 @@
+name: windows-release
+
+# Builds the Windows zips and publishes them as a GitHub release when a
+# version tag is pushed, for example:
+#
+#   git tag -a v0.2.0-windows.2 -m v0.2.0-windows.2
+#   git push origin v0.2.0-windows.2
+#
+# Run it manually (Actions → windows-release → Run workflow) to build the zips
+# as workflow artifacts without publishing a release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    # Upstream publishes its own releases with GoReleaser.
+    if: github.repository != 'maisem/tailmix'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      # GitHub-hosted runners are elevated, so named-pipe tests run too.
+      - run: go test ./...
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # mkversion derives the version from tags and history.
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build Windows zips
+        run: ./scripts/windows/dist.sh
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum tailmix-windows-*.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tailmix-windows
+          path: |
+            dist/tailmix-windows-*.zip
+            dist/SHA256SUMS.txt
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > notes.md <<EOF
+          Windows build of tailmix, a fork of [maisem/tailmix](https://github.com/maisem/tailmix) that connects one PC to several Tailscale tailnets at once and runs next to the official Tailscale client.
+
+          **Install:** download \`tailmix-windows-amd64.zip\` (or \`-arm64\`), extract it, and run \`install.ps1\`. See the [Windows guide](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/windows.md).
+
+          Checksums are in \`SHA256SUMS.txt\`. The binaries are not code-signed, so Windows SmartScreen may warn. Not affiliated with Tailscale Inc.
+          EOF
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/tailmix-windows-*.zip dist/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" dist/tailmix-windows-*.zip dist/SHA256SUMS.txt \
+              --title "tailmix $TAG" --notes-file notes.md --latest
+          fi

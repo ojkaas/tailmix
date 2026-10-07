@@ -116,6 +116,14 @@ scripts/windows/dist.sh            # dist/tailmix-windows-{amd64,arm64}.zip
 
 The script downloads Wintun 0.14.1 from wintun.net and verifies its checksum.
 
+To publish a release, push a version tag. The `windows-release` workflow
+tests on Windows, builds both zips, and publishes them with checksums:
+
+```sh
+git tag -a v0.2.0-windows.2 -m v0.2.0-windows.2
+git push origin v0.2.0-windows.2
+```
+
 For development on Windows, build with `GOOS=windows go build ./cmd/...` and
 run `tailmixd.exe` from an elevated terminal. Without the service, put
 `wintun.dll` next to `tailmixd.exe`. Tests that listen on named pipes skip
