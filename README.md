@@ -34,6 +34,13 @@ sudo sh install.sh
 For Linux prerequisites and troubleshooting, see the
 [systemd guide](docs/linux-install.md).
 
+**Windows**
+
+Extract `tailmix-windows-amd64.zip` (or `-arm64`) and run `install.ps1`. It
+installs the `tailmixd` service and a tray app that offers the official
+client's everyday controls. On Windows, tailmix can run next to the official
+client. See the [Windows guide](docs/windows.md).
+
 ### 2. Connect your first tailnet
 
 Pick a short profile name such as `work`:
@@ -200,6 +207,7 @@ configured when the exit node is changed or cleared.
 ## More information
 
 - [Linux service setup and troubleshooting](docs/linux-install.md)
+- [Windows install, tray app and troubleshooting](docs/windows.md)
 - [Profile, route, exit-node, and DNS command reference](docs/profile-management.md)
 - [Raw WireGuard profiles](docs/wireguard.md)
 - [Architecture](docs/architecture.md)
