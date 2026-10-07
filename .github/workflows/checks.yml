@@ -30,6 +30,8 @@ permissions:
 
 jobs:
   check:
+    # The self-hosted runner only exists upstream; forks would queue forever.
+    if: github.repository == 'maisem/tailmix'
     runs-on: [self-hosted, tailmix-vm]
     container:
       image: golang:1.27.0

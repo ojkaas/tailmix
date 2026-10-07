@@ -133,6 +133,12 @@ unless the test process is elevated.
 - **DNS.** tailmix writes its own NRPT rules, records them under
   `HKLM\SOFTWARE\tailmix`, and sets DNS only on its own adapter. It honours
   group-policy NRPT like the official client.
-- **Control.** The daemon and each tailnet's LocalAPI listen on named pipes.
+- **Control.** The daemon and each tailnet's LocalAPI listen on named pipes
+  owned by Administrators. Local users may connect but cannot add pipe
+  instances, and tailmix clients refuse any pipe with another owner, so a
+  user cannot impersonate tailmixd by creating its pipe names first.
   Changes are authorized from the caller's Windows token: LocalSystem and
   members of Administrators.
+- **Data directory.** `%ProgramData%\tailmix` must be a plain directory
+  owned by Administrators or LocalSystem; tailmixd refuses a directory or
+  junction that another user created in advance.
