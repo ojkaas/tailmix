@@ -129,30 +129,70 @@ func secureStateDir(statePath string) error {
 	return securePrivateDir(dir)
 }
 
-// privateDirSDDL grants full control to LocalSystem, Administrators and the
-// directory's owner, and blocks inherited permissions. The default
-// ProgramData ACL would otherwise let every local user read node keys.
-const privateDirSDDL = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;OW)"
+// privateDirSDDL makes Administrators the owner, grants full control to
+// LocalSystem and Administrators only, and blocks inherited permissions. The
+// default ProgramData ACL would otherwise let every local user read node
+// keys.
+const privateDirSDDL = "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
 
 // securePrivateDir creates dir if needed and restricts it to privileged
 // accounts. Files created inside inherit the restriction.
+//
+// Ordinary users may create folders in ProgramData. A directory that already
+// exists must therefore be a real directory owned by Administrators or
+// LocalSystem: one a user created in advance, or a junction, could let that
+// user read node keys or redirect the service's writes as LocalSystem.
 func securePrivateDir(dir string) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	info, err := os.Lstat(dir)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return err
+		}
+	case err != nil:
 		return err
+	case !info.IsDir() || info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0:
+		return fmt.Errorf("refusing to use %s: it is not a plain directory", dir)
+	default:
+		if err := checkTrustedOwner(dir); err != nil {
+			return err
+		}
 	}
 	sd, err := windows.SecurityDescriptorFromString(privateDirSDDL)
 	if err != nil {
 		return fmt.Errorf("parse private directory security descriptor: %w", err)
+	}
+	owner, _, err := sd.Owner()
+	if err != nil {
+		return fmt.Errorf("read private directory owner: %w", err)
 	}
 	dacl, _, err := sd.DACL()
 	if err != nil {
 		return fmt.Errorf("read private directory DACL: %w", err)
 	}
 	err = windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT,
-		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
-		nil, nil, dacl, nil)
+		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
+		owner, nil, dacl, nil)
 	if err != nil {
 		return fmt.Errorf("restrict %s: %w", dir, err)
 	}
 	return nil
+}
+
+// checkTrustedOwner fails unless dir is owned by Administrators or
+// LocalSystem.
+func checkTrustedOwner(dir string) error {
+	sd, err := windows.GetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		return fmt.Errorf("read owner of %s: %w", dir, err)
+	}
+	owner, _, err := sd.Owner()
+	if err != nil {
+		return fmt.Errorf("read owner of %s: %w", dir, err)
+	}
+	if owner.IsWellKnown(windows.WinBuiltinAdministratorsSid) || owner.IsWellKnown(windows.WinLocalSystemSid) {
+		return nil
+	}
+	return fmt.Errorf("refusing to use %s: it is owned by %v, not Administrators or LocalSystem; "+
+		"if you did not create it, delete it and restart tailmixd", dir, owner)
 }
