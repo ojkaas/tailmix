@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/netip"
 	"os"
@@ -76,6 +77,39 @@ func TestMuxRoutesOutboundPacketToSelectedProfileTun(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for routed packet")
+	}
+}
+
+func TestMuxDropsMulticastWithoutLogging(t *testing.T) {
+	host := NewChanTUN("host")
+	work := NewChanTUN("work")
+	hostNAT := netip.MustParseAddr("10.250.0.10")
+	effectivePeer := netip.MustParseAddr("100.127.0.1")
+	table := packetmap.Table{
+		Destinations: new(bart.Table[packetmap.Destination]),
+		Sources: map[packetmap.SourceKey]packetmap.Source{
+			{ProfileID: "work"}: {HostIP: hostNAT, CanonicalIP: netip.MustParseAddr("100.65.0.10")},
+		},
+	}
+	table.Destinations.Insert(netip.PrefixFrom(effectivePeer, 32), packetmap.Destination{ProfileID: "work", CanonicalIP: netip.MustParseAddr("100.64.0.1")})
+	logs := make(chan string, 16)
+	logf := func(format string, args ...any) { logs <- fmt.Sprintf(format, args...) }
+	mux := NewMux(host, map[string]*ChanTUN{"work": work}, packetmap.New(table), logf)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go mux.Run(ctx)
+	injectTestOutbound(t, host, testUDP(hostNAT, netip.MustParseAddr("224.0.0.251")))
+	injectTestOutbound(t, host, testUDP(hostNAT, effectivePeer))
+	select {
+	case owned := <-work.outbound:
+		owned.Release()
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the unicast packet")
+	}
+	select {
+	case line := <-logs:
+		t.Fatalf("multicast drop was logged: %q", line)
+	default:
 	}
 }
 
