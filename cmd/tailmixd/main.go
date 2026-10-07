@@ -75,6 +75,14 @@ func main() {
 		}
 		return
 	}
+	if handled, err := platformMain(func(ctx context.Context, stdout, stderr io.Writer) error {
+		return run(ctx, os.Args[1:], stdout, stderr)
+	}); handled {
+		if err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -134,6 +142,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
+	if err := checkPlatformPrivileges(); err != nil {
+		return err
+	}
+	if err := secureStateDir(*statePath); err != nil {
+		return err
+	}
 	store := state.NewJSONStore(*statePath)
 	st, err := store.Load()
 	if err != nil {
@@ -193,6 +207,9 @@ func registerProfileFlags(fs *flag.FlagSet, profiles *profileFlag) {
 }
 
 func defaultStatePath() string {
+	if dir := platformDataDir(); dir != "" {
+		return filepath.Join(dir, "state.json")
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil || dir == "" {
 		return filepath.Join(".", "tailmix-state.json")
@@ -201,6 +218,12 @@ func defaultStatePath() string {
 }
 
 func installedUpdateRoot(argv0 string) string {
+	if runtime.GOOS == "windows" {
+		// The updater replaces the running binaries in place and re-execs,
+		// neither of which Windows supports. Windows installs update by
+		// rerunning the installer.
+		return ""
+	}
 	path, err := filepath.Abs(argv0)
 	if err != nil {
 		return ""
@@ -213,8 +236,11 @@ func installedUpdateRoot(argv0 string) string {
 }
 
 func defaultTUNName() string {
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		return "utun"
+	case "windows":
+		return "tailmix"
 	}
 	return "tailmix0"
 }

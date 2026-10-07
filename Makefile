@@ -8,7 +8,7 @@ SYSTEMCTL ?= systemctl
 SYSTEMD_UNIT_DIR ?= $(PREFIX)/lib/systemd/system
 SYSTEMD_UNIT ?= tailmixd.service
 
-.PHONY: check install install-systemd install-test licenses licenses-check release-check
+.PHONY: check install install-systemd install-test licenses licenses-check release-check windows-dist
 
 check:
 	$(GO) test ./...
@@ -39,6 +39,9 @@ install-systemd: install
 	else \
 		echo "Installed $(SYSTEMD_UNIT) under $(DESTDIR); service was not enabled or started."; \
 	fi
+
+windows-dist:
+	./scripts/windows/dist.sh
 
 licenses:
 	./scripts/licenses.sh update

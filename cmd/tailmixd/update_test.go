@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -103,6 +104,12 @@ func TestApplyUpdateRecordsFailureWithoutRestart(t *testing.T) {
 }
 
 func TestInstalledUpdateRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		if got := installedUpdateRoot(filepath.Join(t.TempDir(), "current", "tailmixd.exe")); got != "" {
+			t.Fatalf("installedUpdateRoot = %q, want automatic updates disabled on Windows", got)
+		}
+		return
+	}
 	root := filepath.Join(t.TempDir(), "tailmix")
 	if got := installedUpdateRoot(filepath.Join(root, "current", "tailmixd")); got != root {
 		t.Fatalf("installedUpdateRoot = %q, want %q", got, root)

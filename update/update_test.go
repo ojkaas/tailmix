@@ -12,10 +12,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestApplyVerifiesAndAtomicallyInstallsPair(t *testing.T) {
+	skipOnWindows(t)
 	archive := tarball(t, map[string]string{"nested/tailmix": "client", "nested/tailmixd": "daemon", "README": "ignored"})
 	sum := sha256.Sum256(archive)
 	var server *httptest.Server
@@ -80,6 +82,7 @@ func TestApplyVerifiesAndAtomicallyInstallsPair(t *testing.T) {
 }
 
 func TestInstallRejectsBadChecksumWithoutChangingCurrent(t *testing.T) {
+	skipOnWindows(t)
 	archive := tarball(t, map[string]string{"tailmix": "a", "tailmixd": "b"})
 	srv := assetServer(t, archive, []byte("0000  release.tar.gz\n"))
 	defer srv.Close()
@@ -172,4 +175,13 @@ func assetServer(t *testing.T, archive, sums []byte) *httptest.Server {
 			http.NotFound(w, r)
 		}
 	}))
+}
+
+// skipOnWindows skips tests of the on-disk install layout, which relies on
+// symlinks and directory fsync. tailmixd disables self-updates on Windows.
+func skipOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("self-updates are disabled on Windows")
+	}
 }

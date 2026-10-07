@@ -2,6 +2,41 @@
 
 tailmix connects one host to multiple Tailscale tailnets at the same time.
 
+> **This fork adds Windows support.** It is a fork of
+> [maisem/tailmix](https://github.com/maisem/tailmix); macOS and Linux behave
+> as upstream. Download `tailmix-windows-amd64.zip` (or `-arm64`) from the
+> [releases](https://github.com/ojkaas/tailmix/releases), run `install.ps1`,
+> and see the [Windows guide](docs/windows.md).
+
+## Windows port: what changed
+
+- **Runs as a Windows service.** `tailmixd` registers with the Service
+  Control Manager, restarts after failures, and keeps its state and log in
+  `%ProgramData%\tailmix`, restricted to SYSTEM and Administrators.
+- **Own Wintun adapter.** A `tailmix` network adapter with its own GUID, set
+  up through the IP Helper API, including exit-node routes that cannot loop.
+- **Runs next to the official Tailscale client.** tailmix never touches the
+  official client's adapter, DNS (NRPT) rules, hosts file or registry, and
+  leaves `100.100.100.100` to it. Tailscale's own Windows TUN and DNS code
+  would have collided with the installed client, so tailmix has its own.
+- **Tray app.** `tailmix-tray` gives the official client's everyday
+  controls: connect, log in per tailnet, copy addresses and device names,
+  pick an exit node from any tailnet, add a tailnet, run at login. Its 3×3
+  dot icon lights one coloured row per connected tailnet.
+- **Named-pipe control.** The daemon and each tailnet's LocalAPI listen on
+  Administrator-owned named pipes. Changes require an Administrator account
+  (an unelevated session is enough); clients refuse pipes another user
+  created, and the pipes cannot be hijacked with extra instances.
+- **Windows-correct LocalAPI.** Profile LocalAPIs bypass Tailscale's
+  multi-user Windows server, which would otherwise log tailmix's engines out
+  whenever the CLI or tray connected.
+- **Packaging.** `make windows-dist` builds per-architecture zips with the
+  checksum-verified Wintun DLL and `install.ps1` / `uninstall.ps1`; CI gains a
+  `windows-latest` job.
+
+The full list of changes is in the commits on this fork since upstream
+`ec5b398`.
+
 tailmix is an independent project and is not affiliated with, sponsored by, or
 endorsed by Tailscale Inc. Tailscale is a registered trademark of Tailscale
 Inc.
@@ -11,7 +46,8 @@ Inc.
 You only need to install it, connect one profile, and check that it works.
 
 Before starting, disconnect the regular Tailscale client. It can otherwise
-compete with tailmix for routes and DNS.
+compete with tailmix for routes and DNS. On Windows this is not needed; see
+[running next to the official client](docs/windows.md#running-next-to-the-official-tailscale-client).
 
 ### 1. Install and start tailmix
 
@@ -33,6 +69,13 @@ sudo sh install.sh
 
 For Linux prerequisites and troubleshooting, see the
 [systemd guide](docs/linux-install.md).
+
+**Windows**
+
+Extract `tailmix-windows-amd64.zip` (or `-arm64`) and run `install.ps1`. It
+installs the `tailmixd` service and a tray app that offers the official
+client's everyday controls. On Windows, tailmix can run next to the official
+client. See the [Windows guide](docs/windows.md).
 
 ### 2. Connect your first tailnet
 
@@ -200,6 +243,7 @@ configured when the exit node is changed or cleared.
 ## More information
 
 - [Linux service setup and troubleshooting](docs/linux-install.md)
+- [Windows install, tray app and troubleshooting](docs/windows.md)
 - [Profile, route, exit-node, and DNS command reference](docs/profile-management.md)
 - [Raw WireGuard profiles](docs/wireguard.md)
 - [Architecture](docs/architecture.md)

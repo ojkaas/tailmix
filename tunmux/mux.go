@@ -2,6 +2,7 @@ package tunmux
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -192,6 +193,10 @@ func (m *Mux) runHostToProfiles(ctx context.Context) error {
 				continue
 			}
 			_, route, err := m.mapper.Load().Outbound(pkt)
+			if errors.Is(err, packetmap.ErrNotRoutable) {
+				packet.Release()
+				continue
+			}
 			if err != nil {
 				m.logf("drop outbound packet: %v", err)
 				packet.Release()
