@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build darwin || linux || windows
 
 package dns
 
@@ -59,7 +59,7 @@ func StartService(cfg ServiceConfig) (Service, error) {
 	dialer.SetBus(bus)
 	knobs := new(controlknobs.Knobs)
 	knobs.ForceRegisterMagicDNSIPv4Only.Store(true)
-	osConfigurator, err := tailscaledns.NewOSConfigurator(cfg.Logf, healthTracker, bus, nil, knobs, cfg.TunName)
+	osConfigurator, err := newPlatformOSConfigurator(cfg.Logf, healthTracker, bus, knobs, cfg.TunName)
 	if err != nil {
 		_ = dialer.Close()
 		_ = netMon.Close()
