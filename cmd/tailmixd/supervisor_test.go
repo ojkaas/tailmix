@@ -81,6 +81,7 @@ func lifecycleTestState() state.State {
 }
 
 func TestSupervisorRunHonorsPersistedDownState(t *testing.T) {
+	requirePipePrivileges(t)
 	st := lifecycleTestState()
 	st.Down = true
 	dir := t.TempDir()

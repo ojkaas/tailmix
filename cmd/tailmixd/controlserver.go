@@ -8,12 +8,10 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"runtime"
 	"sync"
 
 	"github.com/maisem/tailmix/controlapi"
 	"github.com/maisem/tailmix/profilesocket"
-	"github.com/tailscale/peercred"
 	"tailscale.com/safesocket"
 )
 
@@ -34,19 +32,13 @@ func startControlServer(ctx context.Context, socketDir string, backend controlap
 	if err != nil {
 		return nil, fmt.Errorf("listen on daemon control socket %s: %w", path, err)
 	}
-	mode := os.FileMode(0600)
-	if safesocket.PlatformUsesPeerCreds() {
-		mode = 0666
-	}
-	if runtime.GOOS == "windows" {
-		// Named pipe; access is governed by safesocket's security descriptor.
-	} else if err := os.Chmod(path, mode); err != nil {
+	if err := secureControlSocket(path); err != nil {
 		_ = listener.Close()
 		return nil, fmt.Errorf("secure daemon control socket %s: %w", path, err)
 	}
 	handler := controlapi.Handler(backend)
 	httpServer := &http.Server{Handler: handler}
-	if safesocket.PlatformUsesPeerCreds() {
+	if controlPeerCredsAvailable() {
 		httpServer.Handler = requireRootForMutations(handler)
 		httpServer.ConnContext = controlConnContext
 	}
@@ -70,18 +62,6 @@ func startControlServer(ctx context.Context, socketDir string, backend controlap
 	return server, nil
 }
 
-func controlConnContext(ctx context.Context, conn net.Conn) context.Context {
-	creds, err := peercred.Get(conn)
-	if err != nil {
-		return ctx
-	}
-	uid, ok := creds.UserID()
-	if !ok {
-		return ctx
-	}
-	return context.WithValue(ctx, peerUIDContextKey{}, uid)
-}
-
 func requireRootForMutations(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -93,7 +73,7 @@ func requireRootForMutations(next http.Handler) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(controlapi.NewError(
-				"permission_denied", "tailmix management commands require root"))
+				"permission_denied", mutationDeniedMessage))
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -105,7 +85,7 @@ func (s *controlServer) Errors() <-chan error { return s.done }
 func (s *controlServer) Close() error {
 	s.closeOnce.Do(func() {
 		s.closeErr = errors.Join(s.http.Close(), s.listener.Close())
-		if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := removeControlSocket(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			s.closeErr = errors.Join(s.closeErr, err)
 		}
 	})
