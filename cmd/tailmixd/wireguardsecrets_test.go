@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,7 +29,9 @@ func TestWireGuardSecretsRoundTripUsesPrivateFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
+	// Windows has no Unix permission bits; the service restricts the data
+	// directory with an ACL instead.
+	if got := info.Mode().Perm(); runtime.GOOS != "windows" && got != 0o600 {
 		t.Fatalf("secret mode = %04o, want 0600", got)
 	}
 	got, err := readWireGuardSecrets(dir, name)
