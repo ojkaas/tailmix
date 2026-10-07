@@ -127,7 +127,7 @@ func (h *windowsHost) prepareInterface(mtu int) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if err != nil {
-		return fmt.Errorf("Windows TUN %s has no IPv4 interface: %w", h.name, err)
+		return fmt.Errorf("find IPv4 interface of Windows TUN %s: %w", h.name, err)
 	}
 	ipif4.NLMTU = uint32(mtu)
 	if err := ipif4.Set(); err != nil {
