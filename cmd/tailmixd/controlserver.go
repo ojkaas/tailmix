@@ -12,7 +12,6 @@ import (
 
 	"github.com/maisem/tailmix/controlapi"
 	"github.com/maisem/tailmix/profilesocket"
-	"tailscale.com/safesocket"
 )
 
 type peerUIDContextKey struct{}
@@ -28,7 +27,7 @@ type controlServer struct {
 
 func startControlServer(ctx context.Context, socketDir string, backend controlapi.Backend) (*controlServer, error) {
 	path := profilesocket.ControlPath(socketDir)
-	listener, err := safesocket.Listen(path)
+	listener, err := profilesocket.Listen(path)
 	if err != nil {
 		return nil, fmt.Errorf("listen on daemon control socket %s: %w", path, err)
 	}

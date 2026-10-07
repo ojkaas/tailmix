@@ -11,7 +11,6 @@ import (
 
 	tailmixprofile "github.com/maisem/tailmix/profile"
 	"github.com/maisem/tailmix/profilesocket"
-	"tailscale.com/safesocket"
 )
 
 type profileAPIServer struct {
@@ -55,7 +54,7 @@ func (g *profileAPIGroup) Start(rp runtimeProfile) error {
 	if err != nil {
 		return err
 	}
-	listener, err := safesocket.Listen(path)
+	listener, err := profilesocket.Listen(path)
 	if err != nil {
 		return fmt.Errorf("listen on profile %q LocalAPI socket %s: %w", rp.State.ID, path, err)
 	}

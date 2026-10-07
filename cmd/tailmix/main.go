@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -73,7 +74,23 @@ type dependencies struct {
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	os.Exit(runWithIO(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, cli.RunWithContext))
+	os.Exit(runWithIO(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, verifySocketBeforeCLI(cli.RunWithContext)))
+}
+
+// verifySocketBeforeCLI checks, on Windows, that the profile LocalAPI pipe
+// belongs to tailmixd before the tailscale CLI, which cannot verify it
+// itself, sends requests there. See profilesocket.Dial.
+func verifySocketBeforeCLI(run cliRunner) cliRunner {
+	return func(ctx context.Context, args []string) error {
+		if runtime.GOOS == "windows" && len(args) > 0 && strings.HasPrefix(args[0], "--socket=") {
+			conn, err := profilesocket.Dial(ctx, strings.TrimPrefix(args[0], "--socket="))
+			if err != nil {
+				return err
+			}
+			conn.Close()
+		}
+		return run(ctx, args)
+	}
 }
 
 func runWithIO(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, runCLI cliRunner) int {

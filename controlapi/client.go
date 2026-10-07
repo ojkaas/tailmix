@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"tailscale.com/safesocket"
 
 	"github.com/maisem/tailmix/profilesocket"
 	tailmixversion "github.com/maisem/tailmix/version"
@@ -25,7 +24,7 @@ func NewClient(socketDir string) *Client {
 	socketPath := profilesocket.ControlPath(socketDir)
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return safesocket.ConnectContext(ctx, socketPath)
+			return profilesocket.Dial(ctx, socketPath)
 		},
 	}
 	return &Client{http: &http.Client{Transport: transport}}

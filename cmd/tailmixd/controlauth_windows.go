@@ -6,19 +6,19 @@ import (
 	"context"
 	"net"
 
+	"github.com/maisem/tailmix/profilesocket"
 	"golang.org/x/sys/windows"
-	"tailscale.com/safesocket"
 )
 
 const mutationDeniedMessage = "tailmix management commands require an Administrator account"
 
-// controlPeerCredsAvailable is true on Windows: safesocket's named pipes
-// expose the client's access token.
+// controlPeerCredsAvailable is true on Windows: tailmix named pipes expose
+// the client's access token.
 func controlPeerCredsAvailable() bool { return true }
 
-// secureControlSocket is a no-op for named pipes. safesocket creates them
-// with a security descriptor that admits local users, and mutations are
-// authorized per connection from the client's token.
+// secureControlSocket is a no-op for named pipes. profilesocket.Listen
+// creates them with a security descriptor that admits local users, and
+// mutations are authorized per connection from the client's token.
 func secureControlSocket(string) error { return nil }
 
 // removeControlSocket is a no-op: a named pipe disappears with its last
@@ -28,7 +28,7 @@ func removeControlSocket(string) error { return nil }
 // controlConnContext marks connections from privileged Windows users with
 // the root UID so that requireRootForMutations admits them.
 func controlConnContext(ctx context.Context, conn net.Conn) context.Context {
-	clientConn, ok := conn.(*safesocket.WindowsClientConn)
+	clientConn, ok := conn.(*profilesocket.PipeConn)
 	if !ok {
 		return ctx
 	}

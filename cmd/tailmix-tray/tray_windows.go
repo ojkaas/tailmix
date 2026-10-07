@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"fyne.io/systray"
 	"github.com/maisem/tailmix/controlapi"
+	"github.com/maisem/tailmix/profilesocket"
 	tailmixversion "github.com/maisem/tailmix/version"
 	"tailscale.com/client/local"
 	"tailscale.com/ipn"
@@ -157,8 +159,15 @@ func peersSignature(peers map[string][]peerItem) string {
 	return b.String()
 }
 
+// localClient talks to a profile's LocalAPI through a verified tailmix pipe.
 func localClient(socket string) *local.Client {
-	return &local.Client{Socket: socket, UseSocketOnly: true}
+	return &local.Client{
+		Socket:        socket,
+		UseSocketOnly: true,
+		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return profilesocket.Dial(ctx, socket)
+		},
+	}
 }
 
 // rebuildLocked replaces the whole menu. Click handlers of the previous menu
