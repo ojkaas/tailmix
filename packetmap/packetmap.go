@@ -53,11 +53,12 @@ func New(table Table) *Mapper {
 	return &Mapper{table: table}
 }
 
-// ErrNotRoutable reports an outbound multicast or broadcast packet. Tailnets
-// carry only unicast traffic, so such packets are dropped. Hosts emit them
-// routinely on every interface (Windows sends mDNS, LLMNR and SSDP on the
-// tailmix adapter), so callers should drop them without logging.
-var ErrNotRoutable = errors.New("multicast and broadcast packets are not routed")
+// ErrNotRoutable reports an outbound multicast, broadcast or link-local
+// packet. Tailnets carry only routable unicast traffic, so such packets are
+// dropped. Hosts emit them routinely on every interface (Windows sends mDNS,
+// LLMNR and SSDP on the tailmix adapter, and link-local replies to LAN
+// neighbours), so callers should drop them without logging.
+var ErrNotRoutable = errors.New("multicast, broadcast and link-local packets are not routed")
 
 func (m *Mapper) Outbound(pkt []byte) ([]byte, Route, error) {
 	var p packet.Parsed
@@ -65,7 +66,7 @@ func (m *Mapper) Outbound(pkt []byte) ([]byte, Route, error) {
 	if p.IPVersion == 0 {
 		return nil, Route{}, fmt.Errorf("unsupported packet")
 	}
-	if dst := p.Dst.Addr(); dst.IsMulticast() || dst == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
+	if dst := p.Dst.Addr(); dst.IsMulticast() || dst.IsLinkLocalUnicast() || dst == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
 		return nil, Route{}, ErrNotRoutable
 	}
 	if m.table.Destinations == nil {
