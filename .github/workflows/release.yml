@@ -13,7 +13,7 @@ jobs:
     if: github.repository == 'maisem/tailmix'
     runs-on: [self-hosted, tailmix-vm]
     container:
-      image: golang:1.27.0
+      image: golang:1.27.1
     steps:
       - uses: actions/checkout@v6
         with:

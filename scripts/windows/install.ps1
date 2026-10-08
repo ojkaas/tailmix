@@ -41,20 +41,42 @@ foreach ($file in $files) {
     }
 }
 
+# If anything fails after the service was stopped, start it again so a failed
+# upgrade does not leave the tailnets disconnected.
+$script:restartServiceOnFailure = $false
+trap {
+    if ($script:restartServiceOnFailure) {
+        Write-Host 'Install failed; starting the previous tailmixd again.'
+        Start-Service -Name $serviceName -ErrorAction SilentlyContinue
+    }
+    break
+}
+
 Write-Host 'Stopping running tailmix components...'
 $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if ($service -and $service.Status -ne 'Stopped') {
     Stop-Service -Name $serviceName -Force
     $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+    $script:restartServiceOnFailure = $true
 }
 Get-Process -Name 'tailmix-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
+# A stopped service or killed process can hold its executable open for a
+# moment after it reports exit; wait so the copy below can replace it.
+Get-Process -Name 'tailmix-tray', 'tailmixd' -ErrorAction SilentlyContinue | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
 
 Write-Host "Installing to $installDir..."
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 foreach ($file in $files + @('install.ps1', 'uninstall.ps1', 'README.md', 'LICENSE.txt', 'wintun-LICENSE.txt', 'THIRD-PARTY-LICENSES.md')) {
     $path = Join-Path $source $file
-    if (Test-Path $path) {
-        Copy-Item -Force -Path $path -Destination $installDir
+    if (-not (Test-Path $path)) { continue }
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            Copy-Item -Force -Path $path -Destination $installDir
+            break
+        } catch [System.IO.IOException] {
+            if ($attempt -ge 10) { throw }
+            Start-Sleep -Milliseconds 500
+        }
     }
 }
 
@@ -86,6 +108,7 @@ if (-not (($machinePath -split ';') -contains $installDir)) {
 Write-Host 'Starting the tailmixd service...'
 Start-Service -Name $serviceName
 (Get-Service -Name $serviceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+$script:restartServiceOnFailure = $false
 $deadline = (Get-Date).AddSeconds(30)
 while (-not ([IO.Directory]::GetFiles('\\.\pipe\') -contains '\\.\pipe\tailmix\tailmixd.sock')) {
     if ((Get-Date) -gt $deadline) {

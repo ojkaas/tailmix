@@ -89,13 +89,15 @@ func TestOutboundUnknownEffectiveDestinationIsRejected(t *testing.T) {
 	}
 }
 
-func TestOutboundMulticastAndBroadcastAreNotRoutable(t *testing.T) {
+func TestOutboundMulticastBroadcastAndLinkLocalAreNotRoutable(t *testing.T) {
 	mapper := New(Table{Destinations: new(bart.Table[Destination])})
 	for _, pkt := range [][]byte{
 		udp4(netip.MustParseAddr("100.127.0.1"), netip.MustParseAddr("224.0.0.251"), 5353, 5353),
 		udp4(netip.MustParseAddr("100.127.0.1"), netip.MustParseAddr("239.255.255.250"), 1900, 1900),
 		udp4(netip.MustParseAddr("100.127.0.1"), netip.MustParseAddr("255.255.255.255"), 68, 67),
 		udp6(netip.MustParseAddr("fd6d:6e65:7400::1"), netip.MustParseAddr("ff02::fb"), 5353, 5353),
+		udp6(netip.MustParseAddr("fd6d:6e65:7400::1"), netip.MustParseAddr("fe80::e2bb:9eff:feac:1"), 5353, 5353),
+		udp4(netip.MustParseAddr("100.127.0.1"), netip.MustParseAddr("169.254.10.20"), 5353, 5353),
 	} {
 		if _, _, err := mapper.Outbound(pkt); !errors.Is(err, ErrNotRoutable) {
 			t.Fatalf("Outbound = %v, want ErrNotRoutable", err)
