@@ -54,15 +54,15 @@ answers with that local address.
 From a new terminal:
 
 ```powershell
+tailmix ts login                    # first tailnet: creates profile "default", prints a login URL
 tailmix profiles add work
-tailmix ts --profile work up        # prints a login URL
-tailmix profiles add home
-tailmix ts --profile home up
+tailmix ts -p work login            # each further tailnet
 tailmix status
 ```
 
-`tailmix ts --profile NAME ...` runs any `tailscale` subcommand against that
-tailnet. See the main README for routes, DNS and exit nodes.
+`tailmix ts -p NAME ...` runs any `tailscale` subcommand against that tailnet;
+with a single profile, `-p` can be left out. See the main README for routes,
+DNS and exit nodes.
 
 Commands that change settings require an Administrator account; an ordinary
 (unelevated) terminal of an administrator is enough. Other users can read
@@ -74,10 +74,13 @@ tailmix and the official client can be installed together:
 
 - tailmix creates its own adapter ("tailmix") and never touches the official
   client's adapter, DNS rules, hosts-file entries or registry settings.
-- tailmix's local addresses come from `100.127.0.0/24` by default, which is
-  more specific than the official client's `100.64.0.0/10` route. If one of
-  your official-client peers really uses an address in that range, choose
-  another pool with `tailmixd -synthetic-pool` (see below).
+- tailmix's local addresses come from `100.127.0.0/16` by default
+  (installations from before v0.2.0-windows.4 keep their `/24`), handed out
+  from the start of the range. The official client routes each of its peers
+  with a `/32` route, which wins over tailmix's range: if an official peer
+  happens to have an address tailmix also handed out, that tailmix device is
+  unreachable by address. Pick another pool with `tailmixd -synthetic-pool`
+  (see below) if that happens.
 - MagicDNS for tailmix's tailnets is served by tailmix's own resolver
   address; `100.100.100.100` stays with the official client.
 - Use an exit node in only one of the two at a time.

@@ -127,5 +127,4 @@ if (-not $NoTray) {
 Write-Host ''
 Write-Host 'tailmix is installed and running.'
 Write-Host 'Add a tailnet from the tray icon (Add tailnet...), or from a new terminal:'
-Write-Host '    tailmix profiles add work'
-Write-Host '    tailmix ts --profile work up'
+Write-Host '    tailmix ts login'
