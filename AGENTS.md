@@ -1,10 +1,17 @@
 # Repository agent instructions
 
+## Language preference
+
+Prefer Go for tools, helpers, and automation. Implement actual test logic and
+test helpers in Go, not Python. Python is acceptable for CI orchestration and
+tests of that orchestration.
+
 ## Commit before returning
 
 After completing a user request, run `make check` and commit all changes made
-for that request before sending the final response. Do not leave agent-authored
-changes uncommitted.
+for that request before sending the final response. Skip `make check` when the
+change touches only documentation (Markdown files and comments); it does not
+exercise them. Do not leave agent-authored changes uncommitted.
 
 Keep commits scoped to the requested work. Preserve unrelated or pre-existing
 worktree changes, and do not include them in the commit. If a commit cannot be

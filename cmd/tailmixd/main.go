@@ -25,14 +25,14 @@ import (
 	"github.com/maisem/tailmix/profilesocket"
 	"github.com/maisem/tailmix/routingpolicy"
 	"github.com/maisem/tailmix/state"
-	"github.com/maisem/tailmix/tunmux"
 	tailmixupdate "github.com/maisem/tailmix/update"
 	tailmixversion "github.com/maisem/tailmix/version"
+	"github.com/tailscale/wireguard-go/tun"
 	"tailscale.com/net/tsaddr"
 )
 
 const (
-	defaultSyntheticPool   = "100.127.0.0/24"
+	defaultSyntheticPool   = "100.127.0.0/16"
 	defaultSyntheticPoolV6 = "fd6d:6e65:7400::/56"
 )
 
@@ -64,7 +64,7 @@ type runtimeProfile struct {
 	State      state.Profile
 	AuthKeyEnv string
 	Engine     tailmixprofile.Engine
-	Tun        *tunmux.ChanTUN
+	Tun        tun.Device
 }
 
 func main() {
@@ -1006,6 +1006,33 @@ func tunConfigWithPolicy(st state.State, statuses []tailmixprofile.Status, lease
 			}
 		}
 	}
+	// Retained leases still need host routes so attempts to use a departed
+	// target reach the mux and refresh its grace period. They have no peer
+	// mapping or DNS records; fail closed rather than falling through to an
+	// exit node or subnet route.
+	for _, lease := range st.Leases {
+		ip := lease.EffectiveIP
+		if !ip.IsValid() {
+			continue
+		}
+		prefix := netip.PrefixFrom(ip, ip.BitLen())
+		if _, active := table.Destinations.Get(prefix); active {
+			continue
+		}
+		poolRaw := st.SyntheticPool
+		if ip.Is6() {
+			poolRaw = st.SyntheticPoolV6
+		}
+		pool, err := netip.ParsePrefix(poolRaw)
+		if err != nil || !pool.Contains(ip) {
+			continue
+		}
+		table.ExactRoutes.Insert(prefix, packetmap.SubnetRoute{})
+		hostCfg.Routes = append(hostCfg.Routes, hosttun.Route{
+			Destination: prefix,
+			Source:      natIPFor(st, ip),
+		})
+	}
 	for _, entry := range policy.Exact {
 		if routeOverlapsReserved(st, entry.Prefix) {
 			return packetmap.Table{}, hosttun.Config{}, fmt.Errorf("bound route %v overlaps a tailmix reserved range", entry.Prefix)
@@ -1071,11 +1098,21 @@ func tunConfigWithPolicy(st state.State, statuses []tailmixprofile.Status, lease
 		return packetmap.Table{}, hosttun.Config{}, errors.New("host IPv4 NAT address is unavailable")
 	}
 	hostCfg.LocalAddrs = append(hostCfg.LocalAddrs, netip.PrefixFrom(st.NATIP, st.NATIP.BitLen()))
+	needsIPv6 := false
 	for key := range table.Sources {
 		if key.IPv6 {
-			hostCfg.LocalAddrs = append(hostCfg.LocalAddrs, netip.PrefixFrom(st.NATIPv6, st.NATIPv6.BitLen()))
+			needsIPv6 = true
 			break
 		}
+	}
+	for _, route := range hostCfg.Routes {
+		if route.Source.Is6() {
+			needsIPv6 = true
+			break
+		}
+	}
+	if needsIPv6 {
+		hostCfg.LocalAddrs = append(hostCfg.LocalAddrs, netip.PrefixFrom(st.NATIPv6, st.NATIPv6.BitLen()))
 	}
 	hostCfg.Routes = append(hostCfg.Routes,
 		hosttun.Route{
