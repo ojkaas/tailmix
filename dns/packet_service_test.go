@@ -324,16 +324,11 @@ func TestPacketServiceAnswersTCPFromBothResolverAddresses(t *testing.T) {
 func TestPacketServiceUDPBoundsManagerFallbackAndReturnsServfail(t *testing.T) {
 	// A real upstream socket accepts both protocols but never answers DNS.
 	// This exercises Manager.Query's UDP race and TCP fallback, not a query mock.
-	tcpUpstream, err := net.Listen("tcp", "127.0.0.1:0")
+	udpUpstream, tcpUpstream, err := listenForwarder(context.Background(), net.ListenUDP, net.ListenTCP)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tcpUpstream.Close()
-	addr := tcpUpstream.Addr().(*net.TCPAddr)
-	udpUpstream, err := net.ListenUDP("udp", &net.UDPAddr{IP: addr.IP, Port: addr.Port})
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer udpUpstream.Close()
 	tcpAccepted, tcpDone := make(chan struct{}, 1), make(chan struct{})
 	go func() {

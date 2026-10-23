@@ -130,7 +130,7 @@ func listenForwarder(ctx context.Context,
 		}
 		_ = udp.Close()
 		// UDP's ephemeral port can already be occupied in the TCP port space.
-		if !errors.Is(err, errAddrInUse) {
+		if !retryableTCPListenError(err) {
 			return nil, nil, err
 		}
 	}
