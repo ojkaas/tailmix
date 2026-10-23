@@ -44,6 +44,20 @@ type windowsInstalledRoute struct {
 type windowsInstalledState struct {
 	localAddrs []netip.Prefix
 	routes     []windowsInstalledRoute
+	// multicast holds the multicast routes Windows adds to every adapter.
+	multicast []windowsInstalledRoute
+}
+
+// windowsMulticastPrefixes are the multicast routes Windows creates on each
+// adapter. Windows sends multicast, and joins multicast groups for sockets
+// bound to no particular interface, through the adapter whose route has the
+// lowest metric. Wintun reports a 100 Gbps link, so the tailmix adapter gets
+// an automatic metric below a physical NIC's and would capture LAN discovery
+// (Minecraft LAN worlds, mDNS, SSDP) that a tailnet never carries. Like the
+// official Tailscale client, tailmix removes these routes from its adapter.
+var windowsMulticastPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("224.0.0.0/4"),
+	netip.MustParsePrefix("ff00::/8"),
 }
 
 type windowsOps struct {
@@ -239,6 +253,15 @@ func (h *windowsHost) Configure(cfg Config) error {
 	if err != nil {
 		return err
 	}
+	// Adding addresses can make Windows recreate its multicast routes, so
+	// remove them after the adapter is otherwise configured. They only steer
+	// LAN multicast away from the physical NIC; failing to remove one does not
+	// affect tailnet traffic.
+	for _, route := range actual.multicast {
+		if err := h.ops.delRoute(route.Destination, route.NextHop); err != nil && !isWindowsNotFound(err) {
+			h.logf("remove Windows multicast route %v from %s: %v", route.Destination, h.name, err)
+		}
+	}
 	if err := verifyHostConfig(localAddrs, routes, actual.localAddrs, windowsRoutes(actual, localAddrs)); err != nil {
 		return fmt.Errorf("verify Windows TUN %s configuration: %w", h.name, err)
 	}
@@ -321,15 +344,23 @@ func (h *windowsHost) readInstalledState() (windowsInstalledState, error) {
 		}
 		for i := range routes {
 			row := &routes[i]
-			if row.InterfaceLUID != h.luid || row.Protocol != winipcfg.RouteProtocolNetMgmt {
-				// Windows creates local, multicast and broadcast routes for
-				// every adapter itself; only static routes are tailmix's.
+			if row.InterfaceLUID != h.luid {
 				continue
 			}
-			state.routes = append(state.routes, windowsInstalledRoute{
+			route := windowsInstalledRoute{
 				Destination: row.DestinationPrefix.Prefix(),
 				NextHop:     row.NextHop.Addr(),
-			})
+			}
+			if slices.Contains(windowsMulticastPrefixes, route.Destination) {
+				state.multicast = append(state.multicast, route)
+				continue
+			}
+			if row.Protocol != winipcfg.RouteProtocolNetMgmt {
+				// Windows also creates local and broadcast routes for every
+				// adapter; only static routes are tailmix's.
+				continue
+			}
+			state.routes = append(state.routes, route)
 		}
 	}
 	return state, nil

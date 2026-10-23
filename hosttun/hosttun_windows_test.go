@@ -3,6 +3,8 @@
 package hosttun
 
 import (
+	"errors"
+	"fmt"
 	"net/netip"
 	"slices"
 	"strings"
@@ -14,9 +16,20 @@ import (
 type fakeWindowsSystem struct {
 	addrs     []netip.Prefix
 	routes    []windowsInstalledRoute
+	multicast []windowsInstalledRoute // routes Windows adds by itself
 	elsewhere []netip.Prefix
 	dropAdds  bool // simulate an add that reports success but does nothing
-	calls     []string
+	// multicastOnAddrAdd simulates Windows recreating its multicast routes
+	// when an address is added.
+	multicastOnAddrAdd bool
+	// failMulticastDelete simulates Windows refusing to delete them.
+	failMulticastDelete bool
+	calls               []string
+}
+
+var systemMulticastRoutes = []windowsInstalledRoute{
+	{netip.MustParsePrefix("224.0.0.0/4"), netip.IPv4Unspecified()},
+	{netip.MustParsePrefix("ff00::/8"), netip.IPv6Unspecified()},
 }
 
 func (f *fakeWindowsSystem) host() *windowsHost {
@@ -25,6 +38,9 @@ func (f *fakeWindowsSystem) host() *windowsHost {
 		addAddr: func(p netip.Prefix) error {
 			f.calls = append(f.calls, "addAddr "+p.String())
 			f.addrs = append(f.addrs, p)
+			if f.multicastOnAddrAdd && len(f.multicast) == 0 {
+				f.multicast = slices.Clone(systemMulticastRoutes)
+			}
 			return nil
 		},
 		delAddr: func(p netip.Prefix) error {
@@ -41,7 +57,12 @@ func (f *fakeWindowsSystem) host() *windowsHost {
 		},
 		delRoute: func(d netip.Prefix, nh netip.Addr) error {
 			f.calls = append(f.calls, "delRoute "+d.String())
-			f.routes = slices.DeleteFunc(f.routes, func(c windowsInstalledRoute) bool { return c.Destination == d && c.NextHop == nh })
+			match := func(c windowsInstalledRoute) bool { return c.Destination == d && c.NextHop == nh }
+			if slices.ContainsFunc(f.multicast, match) && f.failMulticastDelete {
+				return errors.New("access denied")
+			}
+			f.routes = slices.DeleteFunc(f.routes, match)
+			f.multicast = slices.DeleteFunc(f.multicast, match)
 			return nil
 		},
 		routeElsewhere: func(d netip.Prefix) (bool, error) {
@@ -49,7 +70,7 @@ func (f *fakeWindowsSystem) host() *windowsHost {
 		},
 	}
 	h.readState = func() (windowsInstalledState, error) {
-		return windowsInstalledState{localAddrs: slices.Clone(f.addrs), routes: slices.Clone(f.routes)}, nil
+		return windowsInstalledState{localAddrs: slices.Clone(f.addrs), routes: slices.Clone(f.routes), multicast: slices.Clone(f.multicast)}, nil
 	}
 	return h
 }
@@ -200,5 +221,54 @@ func TestWindowsConfigureRejectsRouteFalseSuccess(t *testing.T) {
 func TestWindowsAdapterGUIDDiffersFromTailscale(t *testing.T) {
 	if got := tailmixAdapterGUID.String(); strings.EqualFold(got, "{37217669-42da-4657-a55b-0d995d328250}") {
 		t.Fatal("tailmix adapter GUID collides with the official Tailscale adapter")
+	}
+}
+
+func TestWindowsConfigureRemovesSystemMulticastRoutes(t *testing.T) {
+	sys := &fakeWindowsSystem{multicast: slices.Clone(systemMulticastRoutes)}
+	cfg := Config{
+		LocalAddrs: winLocal,
+		Routes:     []Route{{Destination: netip.MustParsePrefix("100.127.0.8/32"), Source: winNAT4}},
+	}
+	if err := sys.host().Configure(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(sys.multicast) != 0 {
+		t.Fatalf("multicast routes left on the adapter: %v", sys.multicast)
+	}
+	if len(sys.routes) != 1 {
+		t.Fatalf("routes = %v, want only the tailnet route", sys.routes)
+	}
+}
+
+func TestWindowsConfigureRemovesMulticastRoutesRecreatedByAddressAdd(t *testing.T) {
+	// A fresh adapter: Windows adds its multicast routes when tailmix assigns
+	// the first address, in the same Configure call.
+	sys := &fakeWindowsSystem{multicastOnAddrAdd: true}
+	if err := sys.host().Configure(Config{LocalAddrs: winLocal}); err != nil {
+		t.Fatal(err)
+	}
+	if len(sys.multicast) != 0 {
+		t.Fatalf("recreated multicast routes left on the adapter: %v", sys.multicast)
+	}
+}
+
+func TestWindowsConfigureToleratesUndeletableMulticastRoutes(t *testing.T) {
+	sys := &fakeWindowsSystem{multicast: slices.Clone(systemMulticastRoutes), failMulticastDelete: true}
+	var logs []string
+	h := sys.host()
+	h.logf = func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+	cfg := Config{
+		LocalAddrs: winLocal[:1],
+		Routes:     []Route{{Destination: netip.MustParsePrefix("100.127.0.8/32"), Source: winNAT4}},
+	}
+	if err := h.Configure(cfg); err != nil {
+		t.Fatalf("Configure failed because a multicast route could not be removed: %v", err)
+	}
+	if len(sys.routes) != 1 {
+		t.Fatalf("routes = %v, want the tailnet route installed", sys.routes)
+	}
+	if !slices.ContainsFunc(logs, func(l string) bool { return strings.Contains(l, "multicast route") }) {
+		t.Fatalf("logs = %q, want the failed removal logged", logs)
 	}
 }
