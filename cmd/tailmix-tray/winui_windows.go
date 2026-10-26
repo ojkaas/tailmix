@@ -62,7 +62,10 @@ func inputBox(title, prompt, defaultValue string) (string, bool) {
 		"$v = [Microsoft.VisualBasic.Interaction]::InputBox(" + quote(prompt) + ", " + quote(title) + ", " + quote(defaultValue) + "); " +
 		"if ($v -eq '') { exit 1 }; [Console]::Out.Write($v)"
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+	// CREATE_NO_WINDOW alone suppresses the console. HideWindow must stay off:
+	// its SW_HIDE also applies to the first window the process shows, which is
+	// the input dialog itself, leaving it invisible and the tray waiting forever.
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 	out, err := cmd.Output()
 	if err != nil {
 		return "", false
