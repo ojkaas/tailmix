@@ -9,8 +9,8 @@ import (
 
 const errAddrInUse = syscall.EADDRINUSE
 
-// retryableTCPListenError reports whether binding TCP on UDP's ephemeral port
-// failed because the port is already occupied in the TCP port space.
-func retryableTCPListenError(err error) bool {
+// retryableListenError reports whether binding the forwarder's port failed
+// because the port is already occupied.
+func retryableListenError(err error) bool {
 	return errors.Is(err, errAddrInUse)
 }

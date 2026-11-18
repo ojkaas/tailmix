@@ -23,10 +23,10 @@ func collideForwarderTCP(t *testing.T, network string, addr *net.TCPAddr) (*net.
 	t.Helper()
 	blocker, err := net.ListenTCP(network, addr)
 	if err != nil {
-		if !errors.Is(err, errAddrInUse) {
+		if !retryableListenError(err) {
 			t.Fatal(err)
 		}
-		return nil, err
+		return nil, &net.OpError{Op: "listen", Net: network, Err: errAddrInUse}
 	}
 	t.Cleanup(func() { blocker.Close() })
 	return net.ListenTCP(network, addr)
@@ -39,6 +39,16 @@ func checkForwarderUDPClosed(t *testing.T, udp *net.UDPConn) {
 	}
 }
 
+// listenForwarderTestUDP binds addr, or an ephemeral port when the OS refuses
+// a random retry port, so tests that count attempts stay deterministic.
+func listenForwarderTestUDP(network string, addr *net.UDPAddr) (*net.UDPConn, error) {
+	conn, err := net.ListenUDP(network, addr)
+	if err != nil && addr.Port != 0 && retryableListenError(err) {
+		return net.ListenUDP(network, &net.UDPAddr{IP: addr.IP})
+	}
+	return conn, err
+}
+
 func TestListenForwarderRetriesTCPPortCollision(t *testing.T) {
 	var candidates []*net.UDPConn
 	attempts := 0
@@ -47,7 +57,7 @@ func TestListenForwarderRetriesTCPPortCollision(t *testing.T) {
 			for _, candidate := range candidates {
 				checkForwarderUDPClosed(t, candidate)
 			}
-			conn, err := net.ListenUDP(network, addr)
+			conn, err := listenForwarderTestUDP(network, addr)
 			if err == nil {
 				candidates = append(candidates, conn)
 				t.Cleanup(func() { conn.Close() })
@@ -76,6 +86,45 @@ func TestListenForwarderRetriesTCPPortCollision(t *testing.T) {
 	}
 }
 
+// TestListenForwarderRetriesOnSpreadPorts models Windows, which hands out
+// ephemeral ports almost in sequence: retrying with port 0 keeps landing in
+// the same reserved TCP range, so retries must ask for their own port.
+func TestListenForwarderRetriesOnSpreadPorts(t *testing.T) {
+	ephemeral := map[int]bool{}
+	var requested []int
+	udp, tcp, err := listenForwarder(context.Background(),
+		func(network string, addr *net.UDPAddr) (*net.UDPConn, error) {
+			requested = append(requested, addr.Port)
+			conn, err := net.ListenUDP(network, addr)
+			if err == nil && addr.Port == 0 {
+				ephemeral[conn.LocalAddr().(*net.UDPAddr).Port] = true
+			}
+			return conn, err
+		},
+		func(network string, addr *net.TCPAddr) (*net.TCPListener, error) {
+			if ephemeral[addr.Port] {
+				return nil, &net.OpError{Op: "listen", Net: network, Err: errAddrInUse}
+			}
+			return net.ListenTCP(network, addr)
+		})
+	if err != nil {
+		t.Fatalf("listenForwarder = %v after UDP ports %v, want a retry outside the ephemeral sequence", err, requested)
+	}
+	defer udp.Close()
+	defer tcp.Close()
+	if requested[0] != 0 {
+		t.Fatalf("first UDP port = %d, want ephemeral 0", requested[0])
+	}
+	for _, port := range requested[1:] {
+		if port < forwarderRetryPortMin || port > forwarderRetryPortMax {
+			t.Fatalf("retry UDP port = %d, want within %d-%d", port, forwarderRetryPortMin, forwarderRetryPortMax)
+		}
+	}
+	if got, want := tcp.Addr().String(), udp.LocalAddr().String(); got != want {
+		t.Fatalf("TCP address = %q, want UDP address %q", got, want)
+	}
+}
+
 func TestListenForwarderFailures(t *testing.T) {
 	udpErr := errors.New("UDP bind failed")
 	tcpErr := &net.OpError{Op: "listen", Net: "tcp", Err: syscall.EACCES}
@@ -101,7 +150,7 @@ func TestListenForwarderFailures(t *testing.T) {
 					if tt.udpErr != nil {
 						return nil, tt.udpErr
 					}
-					conn, err := net.ListenUDP(network, addr)
+					conn, err := listenForwarderTestUDP(network, addr)
 					if err == nil {
 						candidates = append(candidates, conn)
 						t.Cleanup(func() { conn.Close() })

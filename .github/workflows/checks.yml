@@ -52,7 +52,7 @@ jobs:
     if: github.repository == 'maisem/tailmix' && (github.event_name != 'workflow_dispatch' || inputs.suite != 'linux-network')
     runs-on: [self-hosted, tailmix-vm]
     container:
-      image: golang:1.27.3
+      image: golang:1.27.4
     steps:
       - uses: actions/checkout@v6
         with:
@@ -78,7 +78,7 @@ jobs:
     if: github.repository == 'maisem/tailmix' && (github.event_name != 'workflow_dispatch' || inputs.suite != 'check')
     runs-on: [self-hosted, tailmix-vm]
     container:
-      image: golang:1.27.3
+      image: golang:1.27.4
     timeout-minutes: 20
     env:
       GOMAXPROCS: "2"

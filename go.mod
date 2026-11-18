@@ -1,6 +1,6 @@
 module github.com/maisem/tailmix
 
-go 1.27.3
+go 1.27.4
 
 require (
 	fyne.io/systray v1.12.2
@@ -9,15 +9,15 @@ require (
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55
 	github.com/tailscale/netlink v1.1.1-0.20240822203006-4d49adab4de7
 	github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc
-	github.com/tailscale/wireguard-go v0.0.0-20260928213032-417aef361226
+	github.com/tailscale/wireguard-go v0.0.0-20261106233718-9e0ab45c16ca
 	go.yaml.in/yaml/v2 v2.4.4
 	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb
 	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.60.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.zx2c4.com/wireguard/windows v1.0.1
 	gvisor.dev/gvisor v0.0.0-20260915211658-a6f909f08a72
-	tailscale.com v1.104.1
+	tailscale.com v1.104.7
 )
 
 require (
@@ -63,7 +63,7 @@ require (
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/jsimonetti/rtnetlink v1.4.2 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/klauspost/compress v1.20.0 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
@@ -76,7 +76,7 @@ require (
 	github.com/safchain/ethtool v0.7.0 // indirect
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // indirect
 	github.com/tailscale/certstore v0.1.1-0.20260409135935-3638fb84b77d // indirect
-	github.com/tailscale/gliderssh v0.3.4-0.20260716005906-1a0f895faf28 // indirect
+	github.com/tailscale/gliderssh v0.3.4-0.20261026144310-31f7cf365d3a // indirect
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f // indirect
 	github.com/tailscale/web-client-prebuilt v0.0.0-20260917222731-e0ed2d0d0fea // indirect
 	github.com/toqueteos/webbrowser v1.2.1 // indirect
@@ -84,17 +84,17 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260811152304-ee035b5b010f // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
-	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260908163034-4bcc4b2ee518 // indirect
-	golang.org/x/term v0.46.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260924152758-ed294f943157 // indirect
+	golang.org/x/term v0.47.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	golang.org/x/tools v0.50.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	golang.org/x/vuln v1.6.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	honnef.co/go/tools v0.8.1 // indirect
