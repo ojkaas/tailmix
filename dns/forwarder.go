@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/netip"
@@ -109,17 +110,39 @@ func startForwarder(ctx context.Context, dialer ProfileDialer, queryer ProfileDN
 
 const forwarderListenAttempts = 10
 
+// Retries bind an explicit port from the IANA dynamic range. Windows hands
+// out ephemeral ports almost in sequence, so retrying with port 0 can land in
+// the same 100-port range that Hyper-V, WSL or Docker reserved for TCP on
+// every attempt.
+const (
+	forwarderRetryPortMin = 49152
+	forwarderRetryPortMax = 65535
+)
+
+func forwarderRetryPort() int {
+	return forwarderRetryPortMin + rand.IntN(forwarderRetryPortMax-forwarderRetryPortMin+1)
+}
+
 func listenForwarder(ctx context.Context,
 	listenUDP func(string, *net.UDPAddr) (*net.UDPConn, error),
 	listenTCP func(string, *net.TCPAddr) (*net.TCPListener, error),
 ) (*net.UDPConn, *net.TCPListener, error) {
 	var err error
-	for range forwarderListenAttempts {
+	for attempt := range forwarderListenAttempts {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		udp, udpErr := listenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		udpAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)}
+		if attempt > 0 {
+			udpAddr.Port = forwarderRetryPort()
+		}
+		udp, udpErr := listenUDP("udp", udpAddr)
 		if udpErr != nil {
+			// A random retry port can be taken or reserved for UDP too.
+			if attempt > 0 && retryableListenError(udpErr) {
+				err = udpErr
+				continue
+			}
 			return nil, nil, udpErr
 		}
 		port := udp.LocalAddr().(*net.UDPAddr).Port
@@ -130,7 +153,7 @@ func listenForwarder(ctx context.Context,
 		}
 		_ = udp.Close()
 		// UDP's ephemeral port can already be occupied in the TCP port space.
-		if !retryableTCPListenError(err) {
+		if !retryableListenError(err) {
 			return nil, nil, err
 		}
 	}

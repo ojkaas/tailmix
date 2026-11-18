@@ -26,7 +26,7 @@ func TestListenForwarderRetriesExcludedTCPPort(t *testing.T) {
 	}
 	defer udp.Close()
 	defer tcp.Close()
-	if attempts != 2 {
-		t.Fatalf("TCP attempts = %d, want 2", attempts)
+	if attempts < 2 {
+		t.Fatalf("TCP attempts = %d, want at least 2", attempts)
 	}
 }
